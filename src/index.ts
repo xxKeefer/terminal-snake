@@ -1,5 +1,7 @@
 import TK, { Terminal, ScreenBuffer } from 'terminal-kit'
 
+type ValuesOf<T> = T[keyof T]
+
 type GameState = {
     snake: Snake
     game: Game
@@ -7,6 +9,8 @@ type GameState = {
 
 type Snake = {
     position: Coords
+    tail: Coords[]
+    direction: Cardinals
 }
 
 type Game = {
@@ -25,6 +29,13 @@ const INITIAL_STATE: GameState = {
             x: 0,
             y: 0,
         },
+        tail: [
+            {
+                x: 0,
+                y: 0,
+            },
+        ],
+        direction: 'RIGHT',
     },
     game: {
         playing: true,
@@ -35,16 +46,25 @@ const INITIAL_STATE: GameState = {
     },
 }
 
-const DIRECTIONS = Object.freeze({
-    UP: ['W', 'w', 'UP'] as const,
-    DOWN: ['S', 's', 'DOWN'] as const,
-    LEFT: ['A', 'a', 'LEFT'] as const,
-    RIGHT: ['D', 'd', 'RIGHT'] as const,
+const Cardinal = Object.freeze({
+    Up: 'UP',
+    Down: 'DOWN',
+    Left: 'LEFT',
+    Right: 'RIGHT',
 })
 
-type DirectionalInput = (typeof DIRECTIONS)[keyof typeof DIRECTIONS][number]
-type CommandInput = 'CTRL_C'
-type ExpectedInput = DirectionalInput | CommandInput
+type Cardinals = ValuesOf<typeof Cardinal>
+
+const Direction = Object.freeze({
+    [Cardinal.Up]: ['W', 'w', 'UP'] as const,
+    [Cardinal.Down]: ['S', 's', 'DOWN'] as const,
+    [Cardinal.Left]: ['A', 'a', 'LEFT'] as const,
+    [Cardinal.Right]: ['D', 'd', 'RIGHT'] as const,
+})
+
+type DirectionalInput = ValuesOf<typeof Direction>[number]
+type ExitInput = 'CTRL_C'
+type ExpectedInput = DirectionalInput | ExitInput
 
 function main(
     render: (screen: TK.ScreenBuffer, state: GameState) => void,
@@ -74,7 +94,8 @@ function main(
                 exit(terminal)
                 return
             }
-            updates = handleControls(name, updates)
+
+            updates.snake = handleControls(name, updates.snake)
         })
 
         const screen = new TK.ScreenBuffer({
@@ -90,18 +111,26 @@ function main(
 function render(screen: ScreenBuffer, state: GameState) {
     screen.fill({ attr: { bgColor: 'black' } })
 
-    const { snake } = state
-    screen.put(
-        {
-            y: snake.position.y,
-            x: snake.position.x,
-            dy: 0,
-            dx: 0,
-            wrap: true,
-            attr: { color: 'green', bgColor: 'green' },
-        },
-        ' ',
-    )
+    if (state.snake.tail.length < 10) {
+        state.snake = handleEat(state.snake)
+    }
+
+    state = handleMove(state)
+
+    state.snake.tail.forEach(({ x, y }) => {
+        screen.put(
+            {
+                y,
+                x,
+                dy: 0,
+                dx: 0,
+                wrap: true,
+                attr: { color: 'green', bgColor: 'green' },
+            },
+            ' ',
+        )
+    })
+
     screen.draw({ delta: true })
     setTimeout(() => render(screen, state), 50)
 }
@@ -110,37 +139,74 @@ function render(screen: ScreenBuffer, state: GameState) {
  * TODO
  *  - split up code
  *  - more sophisticated snake
- *    - constant moove
+ *    - randomise start position
  *  - add food
  *  - make the long boi
  *  - handle snek collision
  *  - title screen
+ *  - dificulty select
+ *     - snek speed
  *  - score
  *  - high score in external txt doc
  */
 
-function handleControls(input: DirectionalInput, state: GameState): GameState {
-    if (DIRECTIONS.DOWN.some((dir) => dir === input)) {
+function handleControls(input: DirectionalInput, snake: Snake): Snake {
+    if (
+        Direction.DOWN.some((dir) => dir === input) &&
+        snake.direction !== 'UP'
+    ) {
+        snake.direction = 'DOWN'
+    }
+    if (
+        Direction.UP.some((dir) => dir === input) &&
+        snake.direction !== 'DOWN'
+    ) {
+        snake.direction = 'UP'
+    }
+    if (
+        Direction.RIGHT.some((dir) => dir === input) &&
+        snake.direction !== 'LEFT'
+    ) {
+        snake.direction = 'RIGHT'
+    }
+    if (
+        Direction.LEFT.some((dir) => dir === input) &&
+        snake.direction !== 'RIGHT'
+    ) {
+        snake.direction = 'LEFT'
+    }
+    return snake
+}
+function handleMove(state: GameState): GameState {
+    if (state.snake.direction === 'DOWN') {
         const next = state.snake.position.y + 1
         const checked = next >= state.game.max.y ? 0 : next
         state.snake.position.y = checked
     }
-    if (DIRECTIONS.UP.some((dir) => dir === input)) {
+    if (state.snake.direction === 'UP') {
         const next = state.snake.position.y - 1
         const checked = next < 0 ? state.game.max.y - 1 : next
         state.snake.position.y = checked
     }
-    if (DIRECTIONS.RIGHT.some((dir) => dir === input)) {
+    if (state.snake.direction === 'RIGHT') {
         const next = state.snake.position.x + 1
         const checked = next >= state.game.max.x ? 0 : next
         state.snake.position.x = checked
     }
-    if (DIRECTIONS.LEFT.some((dir) => dir === input)) {
+    if (state.snake.direction === 'LEFT') {
         const next = state.snake.position.x - 1
         const checked = next < 0 ? state.game.max.x - 1 : next
         state.snake.position.x = checked
     }
+
+    state.snake.tail = [...state.snake.tail, state.snake.position].slice(1)
+
     return state
+}
+
+function handleEat(snake: Snake): Snake {
+    snake.tail = [...snake.tail, snake.position]
+    return snake
 }
 
 function exit(terminal: Terminal) {
