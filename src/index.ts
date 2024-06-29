@@ -4,6 +4,7 @@ type ValuesOf<T> = T[keyof T]
 
 type GameState = {
     snake: Snake
+    food: Food
     game: Game
 }
 
@@ -16,6 +17,10 @@ type Snake = {
 type Game = {
     playing: boolean
     max: Coords
+}
+
+type Food = {
+    position: Coords
 }
 
 type Coords = {
@@ -36,6 +41,9 @@ const INITIAL_STATE: GameState = {
             },
         ],
         direction: 'RIGHT',
+    },
+    food: {
+        position: { x: 0, y: 0 },
     },
     game: {
         playing: true,
@@ -72,8 +80,6 @@ type ExpectedInput = DirectionalInput | ExitInput
  *  - split up code
  *  - more sophisticated snake
  *    - randomise start position
- *  - add food
- *  - make the long boi
  *  - handle snek collision
  *  - title screen
  *  - difficulty select
@@ -126,43 +132,14 @@ function render(terminal: Terminal, state: GameState) {
     })
     view.fill({ attr: { color: 'white', bgColor: 'black' } })
     const DEBUG_HEIGHT = 5
-    showDebug(view, state, DEBUG_HEIGHT)
+    renderDebug(view, state, DEBUG_HEIGHT)
+    renderGame(view, state, DEBUG_HEIGHT)
 
-    // ACTUAL GAME
-    const screen = new TK.ScreenBuffer({
-        dst: view,
-        width: view.width,
-        height: view.height - DEBUG_HEIGHT,
-    })
-    screen.fill({ attr: { color: 'white', bgColor: 'black' } })
-
-    let eat = false
-    if (state.snake.tail.length < 10) {
-        eat = true
-    }
-
-    state = handleMove(state, eat)
-
-    state.snake.tail.forEach(({ x, y }) => {
-        screen.put(
-            {
-                y,
-                x,
-                dy: 0,
-                dx: 0,
-                wrap: true,
-                attr: { color: 'green', bgColor: 'black' },
-            },
-            '*',
-        )
-    })
-
-    screen.draw({ dst: view, x: 0, y: DEBUG_HEIGHT })
     view.draw({ delta: true })
     setTimeout(() => render(terminal, state), 50)
 }
 
-function showDebug(view: ScreenBuffer, state: GameState, height: number) {
+function renderDebug(view: ScreenBuffer, state: GameState, height: number) {
     const debug = new TK.ScreenBuffer({
         dst: view,
         width: view.width,
@@ -181,6 +158,59 @@ function showDebug(view: ScreenBuffer, state: GameState, height: number) {
         JSON.stringify(state, null, 0),
     )
     debug.draw({ dst: view, x: 0, y: 0, blending: true })
+}
+
+function renderGame(view: ScreenBuffer, state: GameState, height: number) {
+    const game = new TK.ScreenBuffer({
+        dst: view,
+        width: view.width,
+        height: view.height - height,
+    })
+    game.fill({ attr: { color: 'white', bgColor: 'transparent' } })
+
+    const eaten = detectCollision(state.snake.position, state.food.position)
+    state = handleMove(state, eaten)
+    if (eaten) state.food.position = randomLocation(game)
+
+    state.snake.tail.forEach(({ x, y }) => {
+        game.put(
+            {
+                y,
+                x,
+                dy: 0,
+                dx: 0,
+                wrap: true,
+                attr: { color: 'green', bgColor: 'transparent' },
+            },
+            '*',
+        )
+    })
+    game.put(
+        {
+            x: state.food.position.x,
+            y: state.food.position.y,
+            dy: 0,
+            dx: 0,
+            wrap: true,
+            attr: { color: 'red', bgColor: 'transparent' },
+        },
+        '*',
+    )
+
+    game.draw({ dst: view, x: 0, y: height, blending: true })
+}
+
+function detectCollision(entity: Coords, target: Coords): boolean {
+    const sameX = entity.x === target.x
+    const sameY = entity.y === target.y
+    return sameX && sameY
+}
+
+function randomLocation(area: ScreenBuffer): Coords {
+    return {
+        x: Math.floor(Math.random() * (area.width + 1)),
+        y: Math.floor(Math.random() * (area.height + 1)),
+    }
 }
 
 function handleControls(input: DirectionalInput, snake: Snake): Snake {
