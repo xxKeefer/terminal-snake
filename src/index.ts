@@ -52,25 +52,21 @@ type ExpectedInput = DirectionalInput | ExitInput
  * TODO
  *  - debug mode
  *  - split up code
- *  - more sophisticated snake
- *    - handle snek collision
- *    - randomise snek starting dir
  *  - title screen
  *  - difficulty select
  *     - snek speed
  *  - score
  *  - high score in external txt doc
+ *  - normalise snek sped on vertical vs horizontal
  */
 
 function main(render: (terminal: TK.Terminal, state: GameState) => void) {
     TK.getDetectedTerminal((error, terminal) => {
         if (error) throw new Error('Cannot detect terminal.')
-        const WIDTH = terminal.width
-        const HEIGHT = terminal.height - 1
 
         const state = initialiseState({
-            x: WIDTH,
-            y: HEIGHT,
+            x: terminal.width,
+            y: terminal.height - 1,
         })
 
         terminal.hideCursor()
@@ -90,6 +86,9 @@ function main(render: (terminal: TK.Terminal, state: GameState) => void) {
 }
 
 function render(terminal: Terminal, state: GameState) {
+    // exit if collision with self
+    if (detectSnakeCollision(state.snake)) exit(terminal)
+
     const view = new TK.ScreenBuffer({
         dst: terminal,
         width: terminal.width,
@@ -171,6 +170,12 @@ function detectCollision(entity: Coords, target: Coords): boolean {
     return sameX && sameY
 }
 
+function detectSnakeCollision(snake: Snake): boolean {
+    return snake.tail
+        .slice(0, -1)
+        .some((segment) => detectCollision(snake.position, segment))
+}
+
 function randomLocation(bounds: Coords): Coords {
     return {
         x: Math.floor(Math.random() * (bounds.x + 1)),
@@ -245,6 +250,9 @@ function initialiseState(bounds: Coords): GameState {
     const snakePosition = randomLocation(bounds)
     let foodPosition = randomLocation(bounds)
 
+    const directions = ['DOWN', 'UP', 'LEFT', 'RIGHT'] as const
+    const direction = directions[Math.floor(Math.random() * directions.length)]
+
     while (detectCollision(snakePosition, foodPosition)) {
         foodPosition = randomLocation(bounds)
     }
@@ -255,7 +263,7 @@ function initialiseState(bounds: Coords): GameState {
         },
         snake: {
             position: snakePosition,
-            direction: 'DOWN',
+            direction,
             tail: [snakePosition],
         },
         game: {
