@@ -1,63 +1,17 @@
 import TK, { Terminal, ScreenBuffer } from 'terminal-kit'
+import { ExpectedInput, GameState } from './types.js'
 
-type ValuesOf<T> = T[keyof T]
-
-type GameState = {
-    snake: Snake
-    food: Food
-    game: Game
-}
-
-type Snake = {
-    position: Coords
-    tail: Coords[]
-    direction: Cardinals
-}
-
-type Game = {
-    playing: boolean
-    max: Coords
-}
-
-type Food = {
-    position: Coords
-}
-
-type Coords = {
-    x: number
-    y: number
-}
-
-const Cardinal = Object.freeze({
-    Up: 'UP',
-    Down: 'DOWN',
-    Left: 'LEFT',
-    Right: 'RIGHT',
-})
-
-type Cardinals = ValuesOf<typeof Cardinal>
-
-const Direction = Object.freeze({
-    [Cardinal.Up]: ['W', 'w', 'UP'] as const,
-    [Cardinal.Down]: ['S', 's', 'DOWN'] as const,
-    [Cardinal.Left]: ['A', 'a', 'LEFT'] as const,
-    [Cardinal.Right]: ['D', 'd', 'RIGHT'] as const,
-})
-
-type DirectionalInput = ValuesOf<typeof Direction>[number]
-type ExitInput = 'CTRL_C'
-type ExpectedInput = DirectionalInput | ExitInput
+import { handleControls, detectSnakeCollision, handleMove } from './snake.js'
+import { initialiseState, detectCollision, randomLocation } from './utils.js'
 
 /**
  * TODO
  *  - debug mode
- *  - split up code
  *  - title screen
  *  - difficulty select
  *     - snek speed
  *  - score
  *  - high score in external txt doc
- *  - normalise snek sped on vertical vs horizontal
  */
 
 function main(render: (terminal: TK.Terminal, state: GameState) => void) {
@@ -164,113 +118,12 @@ function renderGame(view: ScreenBuffer, state: GameState, height: number) {
     game.draw({ dst: view, x: 0, y: height, blending: true })
 }
 
-function detectCollision(entity: Coords, target: Coords): boolean {
-    const sameX = entity.x === target.x
-    const sameY = entity.y === target.y
-    return sameX && sameY
-}
-
-function detectSnakeCollision(snake: Snake): boolean {
-    return snake.tail
-        .slice(0, -1)
-        .some((segment) => detectCollision(snake.position, segment))
-}
-
-function randomLocation(bounds: Coords): Coords {
-    return {
-        x: Math.floor(Math.random() * (bounds.x + 1)),
-        y: Math.floor(Math.random() * (bounds.y + 1)),
-    }
-}
-
-function handleControls(input: DirectionalInput, snake: Snake): Snake {
-    if (
-        Direction.DOWN.some((dir) => dir === input) &&
-        snake.direction !== 'UP'
-    ) {
-        snake.direction = 'DOWN'
-    }
-    if (
-        Direction.UP.some((dir) => dir === input) &&
-        snake.direction !== 'DOWN'
-    ) {
-        snake.direction = 'UP'
-    }
-    if (
-        Direction.RIGHT.some((dir) => dir === input) &&
-        snake.direction !== 'LEFT'
-    ) {
-        snake.direction = 'RIGHT'
-    }
-    if (
-        Direction.LEFT.some((dir) => dir === input) &&
-        snake.direction !== 'RIGHT'
-    ) {
-        snake.direction = 'LEFT'
-    }
-    return snake
-}
-function handleMove(state: GameState, eat: boolean): GameState {
-    if (state.snake.direction === 'DOWN') {
-        const update = state.snake.position.y + 1
-        const checked = update >= state.game.max.y ? 0 : update
-        state.snake.position.y = checked
-    }
-    if (state.snake.direction === 'UP') {
-        const update = state.snake.position.y - 1
-        const checked = update < 0 ? state.game.max.y - 1 : update
-        state.snake.position.y = checked
-    }
-    if (state.snake.direction === 'RIGHT') {
-        const update = state.snake.position.x + 1
-        const checked = update >= state.game.max.x ? 0 : update
-        state.snake.position.x = checked
-    }
-    if (state.snake.direction === 'LEFT') {
-        const update = state.snake.position.x - 1
-        const checked = update < 0 ? state.game.max.x - 1 : update
-        state.snake.position.x = checked
-    }
-
-    if (!eat) state.snake.tail.shift()
-    state.snake.tail.push({ ...state.snake.position })
-
-    return state
-}
-
 function exit(terminal: Terminal) {
     terminal.grabInput(false)
     terminal.reset()
     setTimeout(() => {
         process.exit()
     }, 100)
-}
-
-function initialiseState(bounds: Coords): GameState {
-    const snakePosition = randomLocation(bounds)
-    let foodPosition = randomLocation(bounds)
-
-    const directions = ['DOWN', 'UP', 'LEFT', 'RIGHT'] as const
-    const direction = directions[Math.floor(Math.random() * directions.length)]
-
-    while (detectCollision(snakePosition, foodPosition)) {
-        foodPosition = randomLocation(bounds)
-    }
-
-    return {
-        food: {
-            position: foodPosition,
-        },
-        snake: {
-            position: snakePosition,
-            direction,
-            tail: [snakePosition],
-        },
-        game: {
-            max: bounds,
-            playing: true,
-        },
-    }
 }
 
 main(render)
