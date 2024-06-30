@@ -28,32 +28,6 @@ type Coords = {
     y: number
 }
 
-const INITIAL_STATE: GameState = {
-    snake: {
-        position: {
-            x: 0,
-            y: 0,
-        },
-        tail: [
-            {
-                x: 0,
-                y: 0,
-            },
-        ],
-        direction: 'RIGHT',
-    },
-    food: {
-        position: { x: 0, y: 0 },
-    },
-    game: {
-        playing: true,
-        max: {
-            x: 0,
-            y: 0,
-        },
-    },
-}
-
 const Cardinal = Object.freeze({
     Up: 'UP',
     Down: 'DOWN',
@@ -79,8 +53,8 @@ type ExpectedInput = DirectionalInput | ExitInput
  *  - debug mode
  *  - split up code
  *  - more sophisticated snake
- *    - randomise start position
- *  - handle snek collision
+ *    - handle snek collision
+ *    - randomise snek starting dir
  *  - title screen
  *  - difficulty select
  *     - snek speed
@@ -88,25 +62,16 @@ type ExpectedInput = DirectionalInput | ExitInput
  *  - high score in external txt doc
  */
 
-function main(
-    render: (terminal: TK.Terminal, state: GameState) => void,
-    initialise: GameState,
-) {
+function main(render: (terminal: TK.Terminal, state: GameState) => void) {
     TK.getDetectedTerminal((error, terminal) => {
         if (error) throw new Error('Cannot detect terminal.')
         const WIDTH = terminal.width
         const HEIGHT = terminal.height - 1
 
-        let updates = {
-            ...initialise,
-            game: {
-                ...initialise.game,
-                max: {
-                    x: WIDTH,
-                    y: HEIGHT,
-                },
-            },
-        }
+        const state = initialiseState({
+            x: WIDTH,
+            y: HEIGHT,
+        })
 
         terminal.hideCursor()
         terminal.grabInput(true)
@@ -117,10 +82,10 @@ function main(
                 return
             }
 
-            updates.snake = handleControls(name, updates.snake)
+            state.snake = handleControls(name, state.snake)
         })
 
-        render(terminal, updates)
+        render(terminal, state)
     })
 }
 
@@ -170,7 +135,7 @@ function renderGame(view: ScreenBuffer, state: GameState, height: number) {
 
     const eaten = detectCollision(state.snake.position, state.food.position)
     state = handleMove(state, eaten)
-    if (eaten) state.food.position = randomLocation(game)
+    if (eaten) state.food.position = randomLocation(state.game.max)
 
     state.snake.tail.forEach(({ x, y }) => {
         game.put(
@@ -206,10 +171,10 @@ function detectCollision(entity: Coords, target: Coords): boolean {
     return sameX && sameY
 }
 
-function randomLocation(area: ScreenBuffer): Coords {
+function randomLocation(bounds: Coords): Coords {
     return {
-        x: Math.floor(Math.random() * (area.width + 1)),
-        y: Math.floor(Math.random() * (area.height + 1)),
+        x: Math.floor(Math.random() * (bounds.x + 1)),
+        y: Math.floor(Math.random() * (bounds.y + 1)),
     }
 }
 
@@ -276,4 +241,28 @@ function exit(terminal: Terminal) {
     }, 100)
 }
 
-main(render, INITIAL_STATE)
+function initialiseState(bounds: Coords): GameState {
+    const snakePosition = randomLocation(bounds)
+    let foodPosition = randomLocation(bounds)
+
+    while (detectCollision(snakePosition, foodPosition)) {
+        foodPosition = randomLocation(bounds)
+    }
+
+    return {
+        food: {
+            position: foodPosition,
+        },
+        snake: {
+            position: snakePosition,
+            direction: 'DOWN',
+            tail: [snakePosition],
+        },
+        game: {
+            max: bounds,
+            playing: true,
+        },
+    }
+}
+
+main(render)
